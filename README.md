@@ -4,6 +4,17 @@ Ledgerly is a production-minded wallet and payment platform built around an immu
 
 > Ledgerly is a portfolio demonstration. It has no authentication and must not be used for real money or personal data.
 
+## Live deployment
+
+| Service | Production URL |
+| --- | --- |
+| Product | [ledgerly-frontend-two.vercel.app](https://ledgerly-frontend-two.vercel.app) |
+| API | [ledgerly-api-kqpa.onrender.com](https://ledgerly-api-kqpa.onrender.com) |
+| Readiness | [ledgerly-api-kqpa.onrender.com/health/ready](https://ledgerly-api-kqpa.onrender.com/health/ready) |
+| Swagger | [ledgerly-api-kqpa.onrender.com/docs](https://ledgerly-api-kqpa.onrender.com/docs) |
+
+The frontend runs on Vercel Hobby, the API runs on a Render free web service, and PostgreSQL runs on Neon. Render can suspend the API after inactivity; the frontend explains the possible cold start and allows the request to be retried.
+
 ## Phase 1 capabilities
 
 - Create one INR and one USD customer wallet per demo persona.
@@ -169,13 +180,13 @@ GitHub Actions starts PostgreSQL 17, runs migrations, executes the full workspac
 
 ## Free-tier deployment
 
-Production resources have not yet been provisioned. The repository is ready for the following account-owned setup.
+The production resources are provisioned entirely on free tiers. The steps below document the deployed configuration and how to recreate it.
 
 ### 1. Neon
 
-1. Create a free Neon project in a region close to Render Singapore.
-2. Copy its PostgreSQL connection string.
-3. Use it as Render's `DATABASE_URL` and keep `DATABASE_SSL=true`.
+1. Create a free Neon PostgreSQL project.
+2. Copy its pooled PostgreSQL connection string.
+3. Use it as Render's secret `DATABASE_URL` and keep `DATABASE_SSL=true`.
 
 The first Render start applies the pending migration and seeds exactly one INR and one USD clearing wallet.
 
@@ -183,7 +194,7 @@ The first Render start applies the pending migration and seeds exactly one INR a
 
 1. In Render, create a Blueprint from this repository's root [render.yaml](./render.yaml).
 2. Set the secret `DATABASE_URL` to the Neon connection string.
-3. Initially set `CORS_ORIGINS` to the Vercel production origin once known.
+3. Set `CORS_ORIGINS` to `https://ledgerly-frontend-two.vercel.app`.
 4. Deploy and verify `/health/ready` and `/docs` on the generated `onrender.com` URL.
 
 Render reserves `preDeployCommand` for paid web services. The free-only `start:render` entry point therefore applies pending migrations before starting NestJS. It is scoped to the single free instance; local and CI flows still run migrations explicitly.
@@ -192,12 +203,14 @@ Render reserves `preDeployCommand` for paid web services. The free-only `start:r
 
 1. Import this GitHub repository as a Vercel project.
 2. Set the project Root Directory to `frontend`.
-3. Add `NEXT_PUBLIC_API_BASE_URL` with the Render API origin.
-4. Deploy, then update Render `CORS_ORIGINS` to the exact Vercel production origin and redeploy the API.
+3. Add `NEXT_PUBLIC_API_BASE_URL=https://ledgerly-api-kqpa.onrender.com` for Production and Preview.
+4. Deploy and verify that the production domain can call the Render API.
 
 ### 4. Smoke test
 
-Verify health and Swagger, then create Alice and Bob wallets, deposit, transfer, retry the same request, and paginate history. Finally, let the Render service sleep and confirm that the frontend displays its startup message during the next cold start.
+The production smoke test verifies health and Swagger, creates INR and USD wallets for Alice and Bob, deposits INR 500 into Bob's wallet, replays the same request without duplicating the movement, transfers INR 125 to Alice, rejects the same idempotency key with a changed payload using `422`, and reads two stable history entries. The resulting demo balances are Bob INR 375 and Alice INR 125.
+
+After the Render service has been idle, the frontend should display its startup message while the first health request wakes the API.
 
 ## Phase boundary
 
