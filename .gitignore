@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+.next/
+dist/
+coverage/
+.turbo/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and local tooling
+*.log
+.DS_Store
+.idea/
+.vscode/
+
+# Deployment providers
+.vercel/
+.render/
