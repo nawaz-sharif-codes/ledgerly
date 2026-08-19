@@ -2,6 +2,8 @@ export interface Environment {
   PORT: number;
   CORS_ORIGINS: string[];
   LOG_LEVEL: string;
+  DATABASE_URL: string;
+  DATABASE_SSL: boolean;
 }
 
 function readString(
@@ -42,9 +44,26 @@ export function validateEnvironment(
     throw new Error('CORS_ORIGINS must contain at least one origin');
   }
 
+  const databaseUrl = readString(
+    environment.DATABASE_URL,
+    'postgresql://ledgerly:ledgerly@localhost:5432/ledgerly',
+    'DATABASE_URL',
+  );
+  const databaseSslValue = readString(
+    environment.DATABASE_SSL,
+    'false',
+    'DATABASE_SSL',
+  );
+
+  if (!['true', 'false'].includes(databaseSslValue)) {
+    throw new Error('DATABASE_SSL must be true or false');
+  }
+
   return {
     PORT: port,
     CORS_ORIGINS: corsOrigins,
     LOG_LEVEL: readString(environment.LOG_LEVEL, 'info', 'LOG_LEVEL'),
+    DATABASE_URL: databaseUrl,
+    DATABASE_SSL: databaseSslValue === 'true',
   };
 }

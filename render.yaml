@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: ledgerly-api
+    runtime: node
+    plan: free
+    region: singapore
+    autoDeployTrigger: checksPass
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @ledgerly/backend build
+    startCommand: pnpm --filter @ledgerly/backend start:render
+    healthCheckPath: /health/ready
+    envVars:
+      - key: NODE_VERSION
+        value: 24.13.0
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: CORS_ORIGINS
+        sync: false
+      - key: LOG_LEVEL
+        value: info

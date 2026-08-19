@@ -9,8 +9,9 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import type { Environment } from './config/environment';
+import { ApiExceptionFilter } from './common/errors/api-exception.filter';
 
-async function bootstrap() {
+export async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),
@@ -26,6 +27,7 @@ async function bootstrap() {
       whitelist: true,
     }),
   );
+  app.useGlobalFilters(new ApiExceptionFilter());
   app.enableCors({
     credentials: false,
     origin: config.getOrThrow<string[]>('CORS_ORIGINS'),
@@ -45,4 +47,15 @@ async function bootstrap() {
   await app.listen(config.getOrThrow<number>('PORT'), '0.0.0.0');
 }
 
-void bootstrap();
+if (require.main === module) {
+  void bootstrap().catch((error: unknown) => {
+    console.error(
+      JSON.stringify({
+        level: 'fatal',
+        message: 'Ledgerly API failed to start',
+        error: error instanceof Error ? error.message : 'Unknown startup error',
+      }),
+    );
+    process.exitCode = 1;
+  });
+}

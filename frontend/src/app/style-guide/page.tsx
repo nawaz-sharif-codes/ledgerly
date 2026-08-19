@@ -18,6 +18,16 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label as FieldLabel } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const colorTokens = [
   { name: "Primary", variable: "--primary", value: "#5e6ad2" },
@@ -60,7 +70,9 @@ function Section({
             {title}
           </h2>
         </div>
-        <p className="max-w-xl text-body text-ink-subtle">{description}</p>
+        <p className="max-w-[calc(var(--spacing-section)*6)] text-body text-ink-subtle">
+          {description}
+        </p>
       </div>
       {children}
     </section>
@@ -96,7 +108,7 @@ export default function StyleGuidePage() {
             <h1 className="text-display-mobile font-semibold md:text-display-xl">
               Precision for every movement of money.
             </h1>
-            <p className="max-w-2xl text-body-lg text-ink-subtle">
+            <p className="max-w-[calc(var(--spacing-section)*7)] text-body-lg text-ink-subtle">
               The Ledgerly interface is quiet by design. Every surface supports
               clear balances, traceable transactions, and confident financial
               operations.
@@ -153,7 +165,7 @@ export default function StyleGuidePage() {
               </div>
               <div className="grid gap-md py-lg md:grid-cols-[1fr_4fr] md:items-baseline">
                 <Label>body · 16/24</Label>
-                <p className="max-w-2xl text-body text-ink-muted">
+                <p className="max-w-[calc(var(--spacing-section)*7)] text-body text-ink-muted">
                   Wallet balances are clear, payment states are explicit, and
                   the ledger remains the source of truth.
                 </p>
@@ -239,6 +251,63 @@ export default function StyleGuidePage() {
                 <div className="flex flex-col gap-xs">
                   <Label>disabled</Label>
                   <Button disabled>Send payment</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="grid gap-lg lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Select controls</CardTitle>
+                <CardDescription>
+                  Persona and wallet selection states.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-md">
+                <div className="flex flex-col gap-xs">
+                  <FieldLabel htmlFor="guide-persona">Demo persona</FieldLabel>
+                  <Select defaultValue="alice">
+                    <SelectTrigger id="guide-persona">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="alice">Alice Mehta</SelectItem>
+                      <SelectItem value="bob">Bob Fernandes</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Separator />
+                <div className="flex flex-col gap-xs">
+                  <FieldLabel htmlFor="guide-disabled-select">
+                    Disabled
+                  </FieldLabel>
+                  <Select disabled defaultValue="inr">
+                    <SelectTrigger id="guide-disabled-select">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inr">INR wallet</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Loading skeletons</CardTitle>
+                <CardDescription>
+                  Shape-matched placeholders for data views.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-md">
+                <Skeleton className="h-xxl w-full" />
+                <div className="grid grid-cols-[var(--spacing-xxl)_1fr] gap-sm">
+                  <Skeleton className="size-xxl" />
+                  <div className="flex flex-col gap-xs">
+                    <Skeleton className="h-md w-full" />
+                    <Skeleton className="h-sm w-full" />
+                  </div>
                 </div>
               </CardContent>
             </Card>

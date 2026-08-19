@@ -1,90 +1,204 @@
 # Ledgerly
 
-Ledgerly is a production-minded wallet and payment platform built around an immutable, double-entry ledger. The project begins as a modular monolith so the core money-movement invariants can be proven before distributed infrastructure is introduced.
+Ledgerly is a production-minded wallet and payment platform built around an immutable, double-entry ledger. Phase 1 is a modular monolith: the accounting and concurrency invariants are proven before distributed infrastructure is introduced.
 
-## Start here
+> Ledgerly is a portfolio demonstration. It has no authentication and must not be used for real money or personal data.
 
-These root documents are part of the initial repository baseline and govern all implementation work:
+## Phase 1 capabilities
 
-- [AGENTS.md](./AGENTS.md) — non-negotiable engineering and workflow rules.
-- [DESIGN.md](./DESIGN.md) — visual tokens, typography, spacing, and component rules.
-- [payment-ledger-platform-architecture.md](./payment-ledger-platform-architecture.md) — Phase 1 architecture, schema, APIs, and boundaries.
+- Create one INR and one USD customer wallet per demo persona.
+- Deposit funds against a platform clearing wallet in the same currency.
+- Transfer funds atomically between matching-currency wallets.
+- Record every movement as balanced, signed `NUMERIC(19,4)` ledger entries.
+- Replay completed mutations safely with UUID v4 idempotency keys.
+- Prevent overdrafts with deterministic PostgreSQL row locks.
+- Browse stable cursor-paginated transaction history.
+- Switch between the stable Alice and Bob demo personas.
+- Explain Render free-tier cold starts in the product interface.
 
-Read all three before contributing. `AGENTS.md` and the architecture specification are authoritative when a generated scaffold or framework default conflicts with the project rules.
+The product dashboard is available at `/`; the approved component baseline remains at `/style-guide`.
 
-## Repository structure
+## Architecture
 
 ```text
-ledgerly/
-├── frontend/   # Next.js App Router, Tailwind, and shadcn/ui
-├── backend/    # NestJS API using Fastify
-├── packages/   # Reserved for future shared contracts and tooling
-└── .github/    # Continuous integration workflows
+Next.js client
+     │
+     ▼
+NestJS + Fastify API
+     │
+     ├── WalletsService ──┐
+     ├── TransfersService ├── one database transaction
+     ├── Idempotency      │
+     └── LedgerService ───┘
+                 │
+                 ▼
+             PostgreSQL
 ```
 
-Turborepo is used only to orchestrate root-level commands across `frontend` and `backend`. It does not determine the application structure.
+`LedgerService` is the only ledger writer. Deposits and transfers commit the transaction record, two balanced ledger entries, cached wallet balances, and idempotency response together or roll everything back.
 
-## Current scope
+### Accounting invariants
 
-The repository is in Phase 1. The first frontend deliverable is the token-backed component style guide at `/style-guide`; product pages will follow only after the style guide is reviewed.
+- API amounts are decimal strings; application arithmetic uses `decimal.js`.
+- PostgreSQL stores money as `NUMERIC(19,4)`; JavaScript floating-point arithmetic is never used for money.
+- Debits are negative and credits are positive. Every transaction sums to exactly zero.
+- Customer balances cannot become negative.
+- `ledger_entries` is append-only. PostgreSQL triggers reject every update or delete.
+- A deferred constraint trigger validates ledger balance before commit.
+- INR and USD are isolated. Currency conversion is intentionally unsupported.
 
-The current backend exposes:
+## Technology
 
-- `GET /health`
-- `GET /health/live`
-- `GET /health/ready`
-- Swagger UI at `/docs`
+| Layer | Choice |
+| --- | --- |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui |
+| Backend | NestJS 11, Fastify, TypeORM, `decimal.js` |
+| Database | PostgreSQL 17 locally and in CI; Neon for the free deployment |
+| Tooling | pnpm 10, Turborepo orchestration, Docker Compose |
+| CI/CD | GitHub Actions with a PostgreSQL service container |
+| Hosting | Vercel frontend, Render free web service, Neon PostgreSQL |
 
-Payment, wallet, ledger, database, Redis, event bus, and later-phase infrastructure are not part of this bootstrap commit.
+Turborepo only orchestrates root `dev`, `build`, `lint`, `typecheck`, and `test` commands across `frontend` and `backend`; it does not drive application structure.
+
+## Governing documents
+
+- [AGENTS.md](./AGENTS.md) defines non-negotiable accounting and workflow rules.
+- [DESIGN.md](./DESIGN.md) defines the visual tokens and component rules.
+- [payment-ledger-platform-architecture.md](./payment-ledger-platform-architecture.md) defines Phase 1 boundaries, schema, and API contracts.
+
+Read all three before contributing.
 
 ## Local development
 
-Prerequisites:
+### Prerequisites
 
-- Node.js 24 (`.nvmrc` pins the local version)
+- Node.js 24 (`.nvmrc` pins the version)
 - pnpm 10.28.2 through Corepack
+- Docker Desktop, or an existing PostgreSQL 17 instance
 
-Install and configure:
+### Start the database and applications
 
 ```bash
 corepack enable
-pnpm install
-cp frontend/.env.example frontend/.env.local
+pnpm install --frozen-lockfile
 cp backend/.env.example backend/.env
-```
-
-Run both applications:
-
-```bash
+cp frontend/.env.example frontend/.env.local
+docker compose up -d postgres
+pnpm --filter @ledgerly/backend migration:run
 pnpm dev
 ```
 
-- Frontend: `http://localhost:3000/style-guide`
-- Backend: `http://localhost:3001/health`
-- API documentation: `http://localhost:3001/docs`
+| Service | Local URL |
+| --- | --- |
+| Product | `http://localhost:3000` |
+| Style guide | `http://localhost:3000/style-guide` |
+| API health | `http://localhost:3001/health` |
+| Swagger | `http://localhost:3001/docs` |
+
+The two stable demo personas are:
+
+| Persona | UUID |
+| --- | --- |
+| Alice | `10000000-0000-4000-8000-000000000001` |
+| Bob | `10000000-0000-4000-8000-000000000002` |
+
+### Environment variables
+
+Backend:
+
+| Variable | Purpose | Local default |
+| --- | --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://ledgerly:ledgerly@localhost:5432/ledgerly` |
+| `DATABASE_SSL` | Enable TLS options for Neon | `false` |
+| `CORS_ORIGINS` | Comma-separated allowed frontend origins | `http://localhost:3000` |
+| `PORT` | API port | `3001` |
+| `LOG_LEVEL` | Structured log threshold | `info` |
+
+Frontend:
+
+| Variable | Purpose | Local default |
+| --- | --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | Browser-visible API origin | `http://localhost:3001` |
+
+`NEXT_PUBLIC_API_BASE_URL` is embedded during the Next.js build and must be set before a Vercel production build.
+
+## API
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/health`, `/health/live`, `/health/ready` | Liveness and readiness |
+| `POST` | `/wallets` | Create a customer wallet |
+| `GET` | `/wallets?userId=<uuid>` | List a persona's wallets |
+| `GET` | `/wallets/:id` | Read a wallet and decimal balance |
+| `POST` | `/wallets/:id/deposit` | Deposit with `Idempotency-Key` |
+| `POST` | `/transfers` | Transfer with `Idempotency-Key` |
+| `GET` | `/wallets/:id/transactions` | Cursor-paginated history |
+
+Swagger documents request DTOs, headers, responses, and stable error codes at `/docs`. API errors use:
+
+```json
+{
+  "statusCode": 422,
+  "code": "INSUFFICIENT_FUNDS",
+  "message": "The source wallet has insufficient funds.",
+  "requestId": "req-..."
+}
+```
+
+## Database migrations
+
+Schema synchronization is disabled in every environment.
+
+```bash
+pnpm --filter @ledgerly/backend migration:run
+pnpm --filter @ledgerly/backend migration:revert
+```
+
+The initial migration creates the schema, constraints, indexes, clearing wallets, immutability trigger, and deferred balancing trigger.
 
 ## Verification
 
 ```bash
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
+pnpm check
+pnpm --filter @ledgerly/backend test:e2e
 ```
 
-Run the complete verification sequence with `pnpm check`.
+The unit suite covers decimal validation, hashing, API-client errors, mutation headers, frontend retry keys, money formatting, and cold-start messaging. The PostgreSQL end-to-end suite covers wallet uniqueness, INR/USD deposits, replay and payload conflicts, concurrent retries, transfers, overdraft prevention, rollback, immutable-ledger triggers, and stable cursor pagination.
 
-## Publishing the repository
+GitHub Actions starts PostgreSQL 17, runs migrations, executes the full workspace check, and then runs database-backed end-to-end tests.
 
-The repository is intended to be public. On a machine with Homebrew:
+## Free-tier deployment
 
-```bash
-brew install gh
-gh auth login
-git init -b main
-git add .
-git commit -m "chore: bootstrap ledgerly monorepo"
-gh repo create ledgerly --public --source=. --remote=origin --push
-```
+Production resources have not yet been provisioned. The repository is ready for the following account-owned setup.
 
-The initial commit includes this README and all three governing root documents listed above.
+### 1. Neon
+
+1. Create a free Neon project in a region close to Render Singapore.
+2. Copy its PostgreSQL connection string.
+3. Use it as Render's `DATABASE_URL` and keep `DATABASE_SSL=true`.
+
+The first Render start applies the pending migration and seeds exactly one INR and one USD clearing wallet.
+
+### 2. Render
+
+1. In Render, create a Blueprint from this repository's root [render.yaml](./render.yaml).
+2. Set the secret `DATABASE_URL` to the Neon connection string.
+3. Initially set `CORS_ORIGINS` to the Vercel production origin once known.
+4. Deploy and verify `/health/ready` and `/docs` on the generated `onrender.com` URL.
+
+Render reserves `preDeployCommand` for paid web services. The free-only `start:render` entry point therefore applies pending migrations before starting NestJS. It is scoped to the single free instance; local and CI flows still run migrations explicitly.
+
+### 3. Vercel
+
+1. Import this GitHub repository as a Vercel project.
+2. Set the project Root Directory to `frontend`.
+3. Add `NEXT_PUBLIC_API_BASE_URL` with the Render API origin.
+4. Deploy, then update Render `CORS_ORIGINS` to the exact Vercel production origin and redeploy the API.
+
+### 4. Smoke test
+
+Verify health and Swagger, then create Alice and Bob wallets, deposit, transfer, retry the same request, and paginate history. Finally, let the Render service sleep and confirm that the frontend displays its startup message during the next cold start.
+
+## Phase boundary
+
+Redis, Kafka, Outbox, Saga, DLQ, reconciliation, distributed locks, Terraform-managed AWS resources, notification services, and audit services are deliberately deferred to Phase 2/3.

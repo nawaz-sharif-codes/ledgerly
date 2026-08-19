@@ -10,6 +10,15 @@ A simplified wallet/payment platform demonstrating production-grade backend engi
 
 **Phase 1 goal:** a user can create a wallet, deposit money, transfer money to another wallet, and view transaction history — with every balance change backed by an immutable, balanced double-entry ledger, and every mutating request protected by idempotency keys.
 
+### Approved Phase 1 decisions
+
+- The data layer uses TypeORM with explicit migrations. Schema synchronization is disabled in every environment.
+- Wallets support `INR` and `USD`. Currency conversion is not supported; transfers require matching currencies.
+- Deposits balance against one platform-owned clearing wallet per currency.
+- Ledger amounts are signed `NUMERIC(19,4)` values: debits are negative and credits are positive.
+- Alice and Bob are stable demo personas identified by UUID. Phase 1 does not add authentication or a users table.
+- Money is serialized across the API as decimal strings and calculated with `decimal.js`, never native floating-point numbers.
+
 **Explicitly deferred to later phases:** Kafka/event bus, Outbox pattern, Saga pattern, DLQ, reconciliation jobs, distributed locking, separate notification/audit microservices. Do not scaffold infrastructure for these in Phase 1 — introducing them before there's a second service to coordinate with adds complexity with nothing yet to justify it.
 
 ---
@@ -55,11 +64,21 @@ One deployed service, internally split into clean NestJS modules with explicit b
 ```sql
 CREATE TABLE wallets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
-  currency VARCHAR(3) NOT NULL DEFAULT 'USD',
+  user_id UUID,
+  wallet_type VARCHAR(20) NOT NULL, -- 'customer' | 'clearing'
+  currency VARCHAR(3) NOT NULL, -- 'INR' | 'USD'
   balance_after NUMERIC(19,4) NOT NULL DEFAULT 0, -- cached snapshot, only ever updated inside the same transaction as a ledger write
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT chk_wallet_owner CHECK (
+    (wallet_type = 'customer' AND user_id IS NOT NULL) OR
+    (wallet_type = 'clearing' AND user_id IS NULL)
+  )
 );
+
+CREATE UNIQUE INDEX uq_customer_wallet_currency
+  ON wallets(user_id, currency) WHERE wallet_type = 'customer';
+CREATE UNIQUE INDEX uq_clearing_wallet_currency
+  ON wallets(currency) WHERE wallet_type = 'clearing';
 
 CREATE TABLE transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -74,7 +93,7 @@ CREATE TABLE ledger_entries (
   wallet_id UUID NOT NULL REFERENCES wallets(id),
   transaction_id UUID NOT NULL REFERENCES transactions(id),
   entry_type VARCHAR(10) NOT NULL, -- 'debit' | 'credit'
-  amount NUMERIC(19,4) NOT NULL,
+  amount NUMERIC(19,4) NOT NULL, -- signed: debit < 0, credit > 0
   balance_after NUMERIC(19,4) NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -93,6 +112,8 @@ CREATE INDEX idx_ledger_entries_transaction ON ledger_entries(transaction_id);
 
 **Non-negotiable rule:** `ledger_entries` rows are immutable — never UPDATE or DELETE them. Every transaction produces at least one debit and one credit row whose amounts balance to zero across the transaction. `wallets.balance_after` is a cached read-optimization only, always written in the same DB transaction as the ledger rows it summarizes — never updated independently.
 
+The initial migration enforces immutability with a trigger that rejects updates and deletes, and uses a deferred constraint trigger to verify each transaction sums to zero before commit. It also seeds exactly one INR clearing wallet and one USD clearing wallet.
+
 ---
 
 ## 5. API surface (Phase 1)
@@ -105,6 +126,8 @@ POST   /transfers                  Transfer between two wallets (requires Idempo
 GET    /wallets/:id/transactions   Paginated transaction history
 GET    /health                     Health check (used by the frontend's "waking up" state)
 ```
+
+Wallet creation accepts `userId` plus `currency` (`INR` or `USD`). All request and response money values are decimal strings. Transaction history uses an opaque cursor ordered by `created_at DESC, id DESC`, with a default limit of 20 and maximum of 100.
 
 ### Idempotency handling (applies to `/deposit` and `/transfers`)
 
@@ -139,6 +162,13 @@ src/
     idempotency.service.ts
     idempotency.module.ts
     entities/idempotency-key.entity.ts
+  transfers/
+    transfers.controller.ts
+    transfers.service.ts
+    transfers.module.ts
+  database/
+    data-source.ts
+    migrations/
   health/
     health.controller.ts
   app.module.ts
@@ -164,6 +194,7 @@ components/
   server-status-indicator.tsx  # "waking up the server" loading state
 lib/
   api-client.ts                # wraps fetch with idempotency-key generation + 60-90s timeout on first call
+  demo-personas.ts             # stable Alice and Bob UUIDs
 DESIGN.md                      # design tokens, at project root
 AGENTS.md                      # agent build rules, at project root
 ```

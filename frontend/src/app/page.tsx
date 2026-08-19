@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation"
+import { Dashboard } from "@/components/dashboard"
 
-export default function Home() {
-  redirect("/style-guide")
+export default function HomePage() {
+  return <Dashboard />
 }
