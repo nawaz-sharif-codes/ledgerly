@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import { PersonaProvider } from "@/components/persona-provider";
 
 export const metadata: Metadata = {
   title: "Ledgerly",
@@ -10,7 +11,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        <PersonaProvider>{children}</PersonaProvider>
+      </body>
     </html>
   );
 }
